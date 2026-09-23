@@ -21,6 +21,10 @@ d_k_en = d_v_en = d_model_en // H
 eps = 1e-5
 d_ff_en = d_model_en * 4 # 通常如此
 
+# 超参数
+num_encoder_layers = 6
+num_decoder_layers = 8
+
 
 # ————————— embedding —————————
 token_ids_en = torch.randint(low=0, high=V, size=(B, N))
