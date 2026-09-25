@@ -21,6 +21,7 @@ M = 36
 H = 8
 max_len = 1024
 d_model_en = 256
+d_model_de = 288
 d_k_en = d_v_en = d_model_en // H
 eps = 1e-5
 d_ff_en = d_model_en * 4 # 
@@ -144,3 +145,11 @@ x_input = torch.cat((bos, target_token_ids_de), dim=-1)
 x_output = torch.cat((target_token_ids_de, eos), dim=-1)
 
 # embedding
+weight_embedding_token_de = torch.randn(V + 2, d_model_de)  # XXX V+1是不是也够？
+
+position_ids_de = torch.arange(0, M + 1)
+weight_embedding_position_de = torch.randn(max_len, d_model_de)
+
+input_embedded_de = weight_embedding_token_de[x_input] + weight_embedding_position_de[position_ids_de]
+
+# Masked Multi-Head Self-Attention Sublayer
