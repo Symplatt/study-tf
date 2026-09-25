@@ -1,10 +1,11 @@
 """
-Transformer全流程完整手搓
+Transformer训练阶段全流程完整手搓
 
 - 使用Post-LN
 - dropout 暂时省略
 - 暂时忽略Encoder embedding 时的 padding
 - 暂不考虑反向传播
+- 每次循环重新randn生成参数，不考虑实际反向传播情况，等第二轮手搓时再说
 """
 
 import torch
@@ -12,22 +13,27 @@ import math
 import torch.nn.functional as F
 
 V = 12345
-max_len = 1024
+BOS_ID = V
+EOS_ID = V + 1
 B = 24
 N = 28
-d_model_en = 256
+M = 36
 H = 8
+max_len = 1024
+d_model_en = 256
 d_k_en = d_v_en = d_model_en // H
 eps = 1e-5
-d_ff_en = d_model_en * 4 # 通常如此
+d_ff_en = d_model_en * 4 # 
+
 
 # 超参数
 num_encoder_layers = 6
 num_decoder_layers = 8
 
+# ================================== Encoder ==================================
 
 # ————————— embedding —————————
-token_ids_en = torch.randint(low=0, high=V, size=(B, N))
+origin_token_ids_en = torch.randint(low=0, high=V, size=(B, N))
 weight_embedding_token_en = torch.randn(V, d_model_en)  # [V, D_en]
 
 position_ids_en = torch.arange(N)  # 递增生成1维张量，内容为 [0,1,2,3……N-1]
@@ -35,7 +41,7 @@ weight_embedding_position_en = torch.randn(max_len, d_model_en)  # [max_len,D_en
 
 # 查表
 input_embedded_en = (
-    weight_embedding_token_en[token_ids_en]
+    weight_embedding_token_en[origin_token_ids_en]
     + weight_embedding_position_en[position_ids_en]
 )  # [B,N,D_en]
 
@@ -123,4 +129,18 @@ while(num < num_encoder_layers):
 
     x_en = x_norm_en_2
 
+# Encoder最终输出
 final_output_en = x_en
+
+# ================================== Encoder ==================================
+
+# 处理Decoder的输入输出
+target_token_ids_de = torch.randint(0, V, (B, M))
+
+bos = torch.full((B, 1), BOS_ID, dtype=torch.long)
+eos = torch.full((B, 1), EOS_ID, dtype=torch.long)
+
+x_input = torch.cat((bos, target_token_ids_de), dim=-1)
+x_output = torch.cat((target_token_ids_de, eos), dim=-1)
+
+# embedding
