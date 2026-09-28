@@ -152,4 +152,11 @@ weight_embedding_position_de = torch.randn(max_len, d_model_de)
 
 input_embedded_de = weight_embedding_token_de[x_input] + weight_embedding_position_de[position_ids_de]
 
-# Masked Multi-Head Self-Attention Sublayer
+# ————————— Masked Multi-Head Self-Attention Sublayer —————————
+
+# 因果掩码
+casual_mask = torch.ones(M + 1, M + 1, dtype=torch.bool)
+future_mask = torch.triu(casual_mask, diagonal=1)
+casual_mask = torch.zeros(M + 1, M + 1).masked_fill(future_mask, float("-inf"))
+
+# 依旧多头自注意
