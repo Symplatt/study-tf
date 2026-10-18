@@ -1,9 +1,10 @@
 """
 Transformer训练阶段全流程完整手搓
+第一轮：因为不会 PyTorch，先用基础 Python 语法实现。
 
 - 使用Post-LN
 - dropout 暂时省略
-- 暂时忽略Encoder embedding 时的 padding
+- 暂不考虑<PAD>、<UNK>
 - 暂不考虑反向传播
 - 每次循环重新randn生成参数，不考虑实际反向传播情况，等第二轮手搓时再说
 """
