@@ -2,9 +2,11 @@
 Transformer训练阶段全流程完整手搓【第一轮】
 因为不会 PyTorch，先用基础 Python 语法实现。
 
+为了易于理解：
 - 使用Post-LN
 - dropout 暂时省略
 - 暂时只考虑 <BOS>、<EOS> 两个特殊 Token，即使 <PAD>、<UNK> 也不考虑
+- Encoder和Decoder共用一张词表，max_len相同
 - 每次循环重新 randn 生成参数，不考虑实际反向传播情况
 """
 
@@ -137,7 +139,7 @@ while num < num_encoder_layers:
 # Encoder最终输出
 final_output_en = x_en
 
-# ================================== Encoder ==================================
+# ================================== Decoder ==================================
 
 # 最初的Decoder输入 [B,M-1]
 origin_token_ids_de = torch.randint(0, V, (B, M - 1))
@@ -145,7 +147,17 @@ origin_token_ids_de = torch.randint(0, V, (B, M - 1))
 bos = torch.full((B, 1), BOS_ID)
 eos = torch.full((B, 1), EOS_ID)
 
+# 输入/输出 Token IDs [B,M]
 input_token_ids_de = torch.cat([bos, origin_token_ids_de], dim=1)
 target_token_ids_de = torch.cat(
     [origin_token_ids_de, eos], dim=-1
 )  # dim -1 和 1在此处完全等价
+
+# Decoder の embedding
+weight_embedding_token_de = torch.randn(V, d_model_de)
+position_ids_de = torch.arange(M)
+weight_embedding_position_de = torch.randn(max_len, d_model_de)
+input_embedded_de = (
+    weight_embedding_token_de[input_token_ids_de]
+    + weight_embedding_position_de[position_ids_de]
+)
