@@ -13,8 +13,8 @@ import math
 import torch.nn.functional as F
 
 V = 12345
-BOS_ID = V
-EOS_ID = V + 1
+BOS_ID = V - 2
+EOS_ID = V - 1
 B = 24
 N = 28
 M = 36
@@ -40,14 +40,14 @@ weight_embedding_token_en = torch.randn(V, d_model_en)
 position_ids_en = torch.arange(N)
 weight_embedding_position_en = torch.randn(max_len, d_model_en)
 
-# 查表 \text{最终输入}=\text{Token Embedding}+\text{Positional Embedding} → [B,N,D_en]
+# 查表，最终输入 = Token Embedding + Positional Embedding → [B,N,D_en]
 input_embedded_en = (
     weight_embedding_token_en[origin_token_ids_en]
     + weight_embedding_position_en[position_ids_en]
 )
 
 num = 0  # BLOCK 循环次数
-x_en = input_embedded_en  # 上一轮的最终结果
+x_en = input_embedded_en  # Encoder Block 循环的初始输入
 while num < num_encoder_layers:
     num += 1
 
@@ -139,30 +139,13 @@ final_output_en = x_en
 
 # ================================== Encoder ==================================
 
-# 处理Decoder的输入输出
-target_token_ids_de = torch.randint(0, V, (B, M))
+# 最初的Decoder输入 [B,M-1]
+origin_token_ids_de = torch.randint(0, V, (B, M - 1))
 
-bos = torch.full((B, 1), BOS_ID, dtype=torch.long)
-eos = torch.full((B, 1), EOS_ID, dtype=torch.long)
+bos = torch.full((B, 1), BOS_ID)
+eos = torch.full((B, 1), EOS_ID)
 
-x_input = torch.cat((bos, target_token_ids_de), dim=-1)
-x_output = torch.cat((target_token_ids_de, eos), dim=-1)
-
-# embedding
-weight_embedding_token_de = torch.randn(V + 2, d_model_de)  # XXX V+1是不是也够？
-
-position_ids_de = torch.arange(0, M + 1)
-weight_embedding_position_de = torch.randn(max_len, d_model_de)
-
-input_embedded_de = (
-    weight_embedding_token_de[x_input] + weight_embedding_position_de[position_ids_de]
-)
-
-# ————————— Masked Multi-Head Self-Attention Sublayer —————————
-
-# 因果掩码
-casual_mask = torch.ones(M + 1, M + 1, dtype=torch.bool)
-future_mask = torch.triu(casual_mask, diagonal=1)
-casual_mask = torch.zeros(M + 1, M + 1).masked_fill(future_mask, float("-inf"))
-
-# 依旧多头自注意
+input_token_ids_de = torch.cat([bos, origin_token_ids_de], dim=1)
+target_token_ids_de = torch.cat(
+    [origin_token_ids_de, eos], dim=-1
+)  # dim -1 和 1在此处完全等价
