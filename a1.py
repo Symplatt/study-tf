@@ -6,7 +6,7 @@ Transformer训练阶段全流程完整手搓【第一轮】
 - 使用Post-LN
 - dropout 暂时省略
 - 暂时只考虑 <BOS>、<EOS> 两个特殊 Token，即使 <PAD>、<UNK> 也不考虑
-- Encoder和Decoder共用一张词表，max_len相同
+- Encoder和Decoder共用一张词表，注意力头数相同，max_len相同，
 - 每次循环重新 randn 生成参数，不考虑实际反向传播情况
 """
 
@@ -25,9 +25,9 @@ max_len = 1024
 d_model_en = 256
 d_model_de = 288
 d_k_en = d_v_en = d_model_en // H
+d_k_de = d_v_de = d_model_de // H
 eps = 1e-5
-d_ff_en = d_model_en * 4  #
-
+d_ff_en = d_model_en * 4
 
 # 超参数
 num_encoder_layers = 6
@@ -55,7 +55,7 @@ while num < num_encoder_layers:
 
     # ————————— Attention —————————
 
-    # 四大天王 [D, H * d_k]
+    # 四大天王
     weight_Q_en = torch.randn(d_model_en, H * d_k_en)  # 东方持国天王，哈！ —— Q：Query
     weight_K_en = torch.randn(d_model_en, H * d_k_en)  # 南方增长天王，嘿！ —— K：Key
     weight_V_en = torch.randn(d_model_en, H * d_v_en)  # 西方广目天王，嚯！ —— V：Value
@@ -161,3 +161,39 @@ input_embedded_de = (
     weight_embedding_token_de[input_token_ids_de]
     + weight_embedding_position_de[position_ids_de]
 )
+
+num = 0  # BLOCK 循环次数
+x_de = input_embedded_de  # Decoder Block 循环的初始输入
+
+while num < num_decoder_layers:
+    num += 1
+
+    # ————————— 掩码多头自注意 —————————
+
+    # QKVO权重
+    weight_Q_de = torch.randn(d_model_de, H * d_k_de)
+    weight_K_de = torch.randn(d_model_de, H * d_k_de)
+    weight_V_de = torch.randn(d_model_de, H * d_v_de)
+    weight_O_de = torch.randn(H * d_v_de, d_model_de)
+
+    # 计算QKV [B, H, M, d_k/d_v]
+    Q_de = (x_de @ weight_Q_de).reshape(B, M, H, d_k_de).transpose(1, 2)
+    K_de = (x_de @ weight_K_de).reshape(B, M, H, d_k_de).transpose(1, 2)
+    V_de = (x_de @ weight_V_de).reshape(B, M, H, d_v_de).transpose(1, 2)
+
+    # 掩码前的计算 [B, H, M, M]
+    scores_de = (Q_de @ K_de.transpose(-1, -2)) / math.sqrt(d_k_de)
+
+    # 你的掩码。不，是你的掩码。 [B, H, M, M]
+    mask = torch.triu(torch.full((M, M), float("-inf")), diagonal=1)
+    scores_de += mask
+
+    # 之后的Attention该咋算咋算，一模一样
+    attn_output_de = torch.softmax(scores_de, dim=-1) @ V_de
+    concat_de = attn_output_de.transpose(1, 2).reshape(B, M, H * d_v_de)
+    output_de = concat_de @ weight_O_de
+
+    # 残差连接
+    residual_de_1 = x_de + output_de
+
+    # ————————— Decoder 第一次 LayerNorm —————————
