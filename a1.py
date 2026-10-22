@@ -83,58 +83,58 @@ while num < num_encoder_layers:
     output_en = concat_en @ weight_O_en
 
     # 残差连接
-    residual_en_1 = x_en + output_en
+    residual_1_en = x_en + output_en
 
     # ————————— 第一次 LayerNorm —————————
 
     # 生成 LN 的权重矩阵 [D]
-    gamma_ln_en_1 = torch.ones(d_model_en)
-    beta_ln_en_1 = torch.zeros(d_model_en)
+    gamma_ln_1_en = torch.ones(d_model_en)
+    beta_ln_1_en = torch.zeros(d_model_en)
 
     # 计算每个 Token 的均值与方差 [B,N,1]
-    mean_ln_en_1 = residual_en_1.mean(dim=-1, keepdim=True)
-    var_ln_en_1 = residual_en_1.var(dim=-1, keepdim=True, unbiased=False)
+    mean_ln_1_en = residual_1_en.mean(dim=-1, keepdim=True)
+    var_ln_1_en = residual_1_en.var(dim=-1, keepdim=True, unbiased=False)
 
     # 计算 LN [B,N,D_en]
-    normalized_ln_en_1 = (residual_en_1 - mean_ln_en_1) / torch.sqrt(var_ln_en_1 + eps)
-    x_norm_en_1 = normalized_ln_en_1 * gamma_ln_en_1 + beta_ln_en_1
+    normalized_ln_1_en = (residual_1_en - mean_ln_1_en) / torch.sqrt(var_ln_1_en + eps)
+    x_norm_1_en = normalized_ln_1_en * gamma_ln_1_en + beta_ln_1_en
 
     # ————————— FFN —————————
 
     # 第一次线性变换 [B,N,D_ff]
-    linear_A_en_1 = torch.randn(d_model_en, d_ff_en)
-    bias_en_1 = torch.zeros(d_ff_en)  # 每列加一个bias，而不是每行
-    x_linear_en_1 = x_norm_en_1 @ linear_A_en_1 + bias_en_1
+    linear_A_1_en = torch.randn(d_model_en, d_ff_en)
+    bias_1_en = torch.zeros(d_ff_en)  # 每列加一个bias，而不是每行
+    x_linear_1_en = x_norm_1_en @ linear_A_1_en + bias_1_en
 
     # 激活函数 [B,N,D_ff]
-    x_GELU_en = F.gelu(x_linear_en_1)
+    x_GELU_en = F.gelu(x_linear_1_en)
 
     # 第二次线性变换 [B,N,D]
-    linear_A_en_2 = torch.randn(d_ff_en, d_model_en)
-    bias_en_2 = torch.zeros(d_model_en)
-    x_linear_en_2 = x_GELU_en @ linear_A_en_2 + bias_en_2
+    linear_A_2_en = torch.randn(d_ff_en, d_model_en)
+    bias_2_en = torch.zeros(d_model_en)
+    x_linear_2_en = x_GELU_en @ linear_A_2_en + bias_2_en
 
     # 残差连接 [B,N,D]
-    residual_en_2 = x_norm_en_1 + x_linear_en_2
+    residual_2_en = x_norm_1_en + x_linear_2_en
 
     # ————————— 第二次 layernorm —————————
 
     # 生成 LN 的权重矩阵 [D]
-    gamma_ln_en_2 = torch.ones(d_model_en)
-    beta_ln_en_2 = torch.zeros(d_model_en)
+    gamma_ln_2_en = torch.ones(d_model_en)
+    beta_ln_2_en = torch.zeros(d_model_en)
 
     # 计算每个 Token 的均值与方差 [B,N,1]
-    mean_ln_en_2 = residual_en_2.mean(dim=-1, keepdim=True)
-    var_ln_en_2 = residual_en_2.var(dim=-1, keepdim=True, unbiased=False)
+    mean_ln_2_en = residual_2_en.mean(dim=-1, keepdim=True)
+    var_ln_2_en = residual_2_en.var(dim=-1, keepdim=True, unbiased=False)
 
     # 懒得写了，直接二合一
-    x_norm_en_2 = (
-        gamma_ln_en_2 * (residual_en_2 - mean_ln_en_2) / torch.sqrt(var_ln_en_2 + eps)
-        + beta_ln_en_2
+    x_norm_2_en = (
+        gamma_ln_2_en * (residual_2_en - mean_ln_2_en) / torch.sqrt(var_ln_2_en + eps)
+        + beta_ln_2_en
     )
 
     # 赋值 x_en，用于下一次 while 循环
-    x_en = x_norm_en_2
+    x_en = x_norm_2_en
 
 # Encoder最终输出
 final_output_en = x_en
@@ -194,18 +194,18 @@ while num < num_decoder_layers:
     output_de = concat_de @ weight_O_de
 
     # 残差连接 [B,M,D]
-    residual_de_1 = x_de + output_de
+    residual_1_de = x_de + output_de
 
     # ————————— Decoder 第一次 LayerNorm —————————
 
     # 那一堆参数
-    gamma_ln_de_1 = torch.ones(d_model_de)  # [D]
-    beta_ln_de_1 = torch.zeros(d_model_de)  # [D]
-    mean_ln_de_1 = residual_de_1.mean(dim=-1, keepdim=True)  # [B,M,1]
-    var_ln_de_1 = residual_de_1.var(dim=-1, keepdim=True)  # [B,M,1]
+    gamma_ln_1_de = torch.ones(d_model_de)  # [D]
+    beta_ln_1_de = torch.zeros(d_model_de)  # [D]
+    mean_ln_1_de = residual_1_de.mean(dim=-1, keepdim=True)  # [B,M,1]
+    var_ln_1_de = residual_1_de.var(dim=-1, keepdim=True, unbiased=False)  # [B,M,1]
 
     # 算算算
-    norm_1_de = (
-        gamma_ln_de_1 * (residual_de_1 - mean_ln_de_1) / torch.sqrt(var_ln_de_1 + eps)
-        + beta_ln_de_1
+    x_norm_1_de = (
+        gamma_ln_1_de * (residual_1_de - mean_ln_1_de) / torch.sqrt(var_ln_1_de + eps)
+        + beta_ln_1_de
     )
