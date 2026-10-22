@@ -244,3 +244,5 @@ while num < num_decoder_layers:
         B, M, H * d_v_cross_de
     )  # [B, M, H * d_v]
     output_cross_de = concat_cross_de @ weight_O_cross_de  # [B, M, D]
+
+    # ————————— Decoder 第二次 LayerNorm —————————
