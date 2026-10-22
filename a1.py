@@ -204,7 +204,7 @@ while num < num_decoder_layers:
     mean_ln_1_de = residual_1_de.mean(dim=-1, keepdim=True)  # [B,M,1]
     var_ln_1_de = residual_1_de.var(dim=-1, keepdim=True, unbiased=False)  # [B,M,1]
 
-    # 算算算
+    # 算算算 [B,M,D]
     x_norm_1_de = (
         gamma_ln_1_de * (residual_1_de - mean_ln_1_de) / torch.sqrt(var_ln_1_de + eps)
         + beta_ln_1_de
