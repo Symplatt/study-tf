@@ -193,7 +193,19 @@ while num < num_decoder_layers:
     concat_de = attn_output_de.transpose(1, 2).reshape(B, M, H * d_v_de)
     output_de = concat_de @ weight_O_de
 
-    # 残差连接
+    # 残差连接 [B,M,D]
     residual_de_1 = x_de + output_de
 
     # ————————— Decoder 第一次 LayerNorm —————————
+
+    # 那一堆参数
+    gamma_ln_de_1 = torch.ones(d_model_de)  # [D]
+    beta_ln_de_1 = torch.zeros(d_model_de)  # [D]
+    mean_ln_de_1 = residual_de_1.mean(dim=-1, keepdim=True)  # [B,M,1]
+    var_ln_de_1 = residual_de_1.var(dim=-1, keepdim=True)  # [B,M,1]
+
+    # 算算算
+    norm_1_de = (
+        gamma_ln_de_1 * (residual_de_1 - mean_ln_de_1) / torch.sqrt(var_ln_de_1 + eps)
+        + beta_ln_de_1
+    )
