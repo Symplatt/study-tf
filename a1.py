@@ -245,4 +245,19 @@ while num < num_decoder_layers:
     )  # [B, M, H * d_v]
     output_cross_de = concat_cross_de @ weight_O_cross_de  # [B, M, D]
 
+    # 残差连接
+    residual_2_de = x_norm_2_de + output_cross_de
+
     # ————————— Decoder 第二次 LayerNorm —————————
+
+    # 参数
+    gamma_ln_2_de = torch.ones(d_model_de)  # [D]
+    beta_ln_2_de = torch.zeros(d_model_de)  # [D]
+    mean_ln_2_de = residual_2_de.mean(dim=-1, keepdim=True)  # [B, M, 1]
+    var_ln_2_de = residual_2_de.var(dim=-1, keepdim=True, unbiased=False)  # [B, M, 1]
+
+    # 计算 [B, M, D]
+    x_norm_2_de = (
+        gamma_ln_2_de * ((residual_2_de - mean_ln_2_de) / torch.sqrt(var_ln_2_de - eps))
+        + beta_ln_2_de
+    )
