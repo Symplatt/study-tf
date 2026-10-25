@@ -10,6 +10,8 @@ Transformer 训练阶段全流程完整手搓【第一轮】
 - 每次循环重新 randn 生成参数，不考虑实际反向传播情况
 """
 
+from re import A
+
 import torch
 import math
 import torch.nn.functional as F
@@ -261,3 +263,5 @@ while num < num_decoder_layers:
         gamma_ln_2_de * ((residual_2_de - mean_ln_2_de) / torch.sqrt(var_ln_2_de - eps))
         + beta_ln_2_de
     )
+
+    # ————————— FFN —————————
