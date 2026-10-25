@@ -10,8 +10,6 @@ Transformer 训练阶段全流程完整手搓【第一轮】
 - 每次循环重新 randn 生成参数，不考虑实际反向传播情况
 """
 
-from re import A
-
 import torch
 import math
 import torch.nn.functional as F
@@ -26,11 +24,18 @@ H = 8
 max_len = 1024
 d_model_en = 256
 d_model_de = 288
+
+# Attention
 d_k_en = d_v_en = d_model_en // H
 d_k_mask_de = d_v_mask_de = d_model_de // H
 d_k_cross_de = d_v_cross_de = d_model_de // H
+
+# LayerNorm
 eps = 1e-5
+
+# FFN
 d_ff_en = d_model_en * 4
+d_ff_de = d_model_de * 4
 
 # 超参数
 num_encoder_layers = 6
@@ -105,17 +110,17 @@ while num < num_encoder_layers:
     # ————————— FFN —————————
 
     # 第一次线性变换 [B, N, D_ff]
-    linear_A_1_en = torch.randn(d_model_en, d_ff_en)
+    linear_1_en = torch.randn(d_model_en, d_ff_en)
     bias_1_en = torch.zeros(d_ff_en)  # 每列加一个 bias，而不是每行
-    x_linear_1_en = x_norm_1_en @ linear_A_1_en + bias_1_en
+    x_linear_1_en = x_norm_1_en @ linear_1_en + bias_1_en
 
     # 激活函数 [B, N, D_ff]
     x_GELU_en = F.gelu(x_linear_1_en)
 
     # 第二次线性变换 [B, N, D]
-    linear_A_2_en = torch.randn(d_ff_en, d_model_en)
+    linear_2_en = torch.randn(d_ff_en, d_model_en)
     bias_2_en = torch.zeros(d_model_en)
-    x_linear_2_en = x_GELU_en @ linear_A_2_en + bias_2_en
+    x_linear_2_en = x_GELU_en @ linear_2_en + bias_2_en
 
     # 残差连接 [B, N, D]
     residual_2_en = x_norm_1_en + x_linear_2_en
@@ -248,7 +253,7 @@ while num < num_decoder_layers:
     output_cross_de = concat_cross_de @ weight_O_cross_de  # [B, M, D]
 
     # 残差连接
-    residual_2_de = x_norm_2_de + output_cross_de
+    residual_2_de = x_norm_1_de + output_cross_de
 
     # ————————— Decoder 第二次 LayerNorm —————————
 
@@ -260,8 +265,37 @@ while num < num_decoder_layers:
 
     # 计算 [B, M, D]
     x_norm_2_de = (
-        gamma_ln_2_de * ((residual_2_de - mean_ln_2_de) / torch.sqrt(var_ln_2_de - eps))
+        gamma_ln_2_de * ((residual_2_de - mean_ln_2_de) / torch.sqrt(var_ln_2_de + eps))
         + beta_ln_2_de
     )
 
     # ————————— FFN —————————
+
+    # 第一次线性变换 [B,M,D_ff]
+    linear_1_de = torch.randn(d_model_de, d_ff_de)
+    bias_1_de = torch.randn(d_ff_de)
+    x_linear_1_de = x_norm_2_de @ linear_1_de + bias_1_de
+
+    # 激活函数
+    x_GELU_de = F.gelu(x_linear_1_de)
+
+    # 二线变 [B,M,D]
+    linear_2_de = torch.randn(d_ff_de, d_model_de)
+    bias_2_de = torch.randn(d_model_de)
+    x_linear_2_de = x_GELU_de @ linear_2_de + bias_2_de
+
+    # 残差连接
+    residual_3_de = x_norm_2_de + x_linear_2_de
+
+    # ————————— 第三次 LayerNorm —————————
+
+    gamma_ln_3_de = torch.ones(d_model_de)  # [D]
+    beta_ln_3_de = torch.zeros(d_model_de)  # [D]
+    mean_ln_3_de = residual_3_de.mean(dim=-1, keepdim=True)  # [B, M, 1]
+    var_ln_3_de = residual_3_de.var(dim=-1, keepdim=True, unbiased=False)  # [B, M, 1]
+    x_norm_3_de = (
+        gamma_ln_3_de * ((residual_3_de - mean_ln_3_de) / torch.sqrt(var_ln_3_de + eps))
+        + beta_ln_3_de
+    )
+
+    x_de = x_norm_3_de  # 赋值 x_de，用于下一次 while 循环
