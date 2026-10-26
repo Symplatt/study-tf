@@ -8,6 +8,7 @@ Transformer 训练阶段全流程完整手搓【第一轮】
 - 暂时只考虑 <BOS>、<EOS> 两个特殊 Token，即使 <PAD>、<UNK> 也不考虑
 - Encoder 和 Decoder 共用一张词表，注意力头数相同，max_len 相同，
 - 每次循环重新 randn 生成参数，不考虑实际反向传播情况
+- 因为一切从简，所以每次循环都以torch.randn重新生成参数，实际训练中不会这么做
 """
 
 import torch
@@ -44,7 +45,9 @@ num_decoder_layers = 8
 # ================================== Encoder ==================================
 
 # Token Embedding
-origin_token_ids_en = torch.randint(low=0, high=V, size=(B, N))
+origin_token_ids_en = torch.randint(
+    low=0, high=V - 2, size=(B, N)
+)  # V-2是为了避免生成 BOS/EOS
 weight_embedding_token_en = torch.randn(V, d_model_en)
 # Positional Embedding
 position_ids_en = torch.arange(N)
@@ -150,7 +153,7 @@ final_output_en = x_en
 # ================================== Decoder ==================================
 
 # 最初的 Decoder 输入 [B, M - 1]
-origin_token_ids_de = torch.randint(0, V, (B, M - 1))
+origin_token_ids_de = torch.randint(0, V - 2, (B, M - 1))  # V-2是为了避免生成 BOS/EOS
 
 bos = torch.full((B, 1), BOS_ID)
 eos = torch.full((B, 1), EOS_ID)
@@ -299,3 +302,28 @@ while num < num_decoder_layers:
     )
 
     x_de = x_norm_3_de  # 赋值 x_de，用于下一次 while 循环
+
+# ————————— 收尾 —————————
+
+# 线性变换
+liner_output_de = torch.randn(d_model_de, V)
+logits_de = x_de @ liner_output_de  # [B, M, V]
+x_output_de = logits_de.softmax(dim=-1)  # [B, M, V]
+
+loss = 0.0
+
+# 利用真实标签[B,M]，从概率张量[B,M,V] 中，为每个样本的每个位置提取正确Token 对应的概率，计算 Loss
+for b in range(B):
+    for m in range(M):
+        # 获取当前位置的目标 Token ID
+        target_token_id = int(target_token_ids_de[b, m].item())
+        # 提取目标 Token 的预测概率
+        p = x_output_de[b, m, target_token_id].item()
+        # 计算交叉熵损失
+        loss = loss + (-math.log(p + 1e-9))  # 避免 log(0)
+
+loss = loss / (B * M)  # 计算所有样本、所有位置上的平均损失
+
+# 反向传播部分略（基础语法手搓的Transformer也没办法整个反向传播出来，反正我是不会）
+
+# END
