@@ -1,3 +1,8 @@
+"""
+Date: 2024-10-26
+Description: PyTorch 张量基础
+"""
+
 import torch
 
 # ————————— 创建张量 —————————
@@ -63,3 +68,32 @@ try:
 except RuntimeError as e:
     print("Error:", e)
     print("Cannot perform matrix multiplication on tensors with incompatible shapes.")
+
+
+# ————————— 索引与形状 —————————
+
+x = torch.randn(36, 64, 256)
+
+# 取第0个 batch，结果形状为 [64, 256]
+a = x[0]
+
+# 取第0个 batch 中第0个序列位置的全部特征，结果形状为 [256]
+b = x[0, 0]
+
+# 取第0个 batch、第0个序列位置、第0个特征，得到0维张量
+c = x[0, 0, 0]
+
+# 使用 item() 提取0维张量中的数值，转换为 Python 数值
+d = x[0, 0, 0].item()
+
+# 取所有 batch 中第0个序列位置的第0个特征，结果形状为 [36]
+e = x[:, 0, 0]
+
+# 取第0个 batch 中所有序列位置的第0个特征，结果形状为 [64]
+f = x[0, :, 0]
+
+# 取所有 batch 中第0个序列位置的全部特征，结果形状为 [36, 256]
+g = x[:, 0, :]
+
+# 取所有 batch 中第0个序列位置的全部特征，并保留序列维度，结果形状为 [36, 1, 256]
+h = x[:, 0:1, :]
