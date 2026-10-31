@@ -56,13 +56,17 @@ print("\n")
 # ————————— 基本运算 —————————
 
 a = torch.tensor([1.0, 2.0, 3.0])
+
+print(a.sum())  # 6
+print(a.mean())  # 2
+
 b = torch.tensor([4.0, 5.0, 6.0])
 
 print(a + b)  # [5, 7, 9]
 print(a * b)  # [4, 10, 18]
-print(a @ b)  # 32 (同shape的两个一维向量相乘，会以点积的方式运算，得到一个标量)
-print(a.sum())  # 6
-print(a.mean())  # 2
+
+# 同shape的两个一维向量相乘，会以点积的方式运算，得到一个0维张量，也叫标量张量
+print(a @ b)  # 32
 
 c = torch.tensor([[1, 2, 3], [4, 5, 6]])
 print(c.shape)
@@ -77,6 +81,11 @@ try:
 except RuntimeError as e:
     print("Error:", e)
     print("Cannot perform matrix multiplication on tensors with incompatible shapes.")
+
+# 对比两种标量
+f = torch.tensor(100)
+print(f)  # 0维标量
+print(f.item())  # python标量
 
 
 # ————————— 索引与形状 —————————
