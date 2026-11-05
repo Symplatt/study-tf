@@ -1,20 +1,8 @@
-import torch
+original = [[1, 2], [3, 4]]  # 假设ori还是指向4000
+shallow = original[:]  # sha也依然指向5000
 
-a = torch.tensor([1.0, 2.0, 3.0])
+original[0][0] = 99
+original[0][1] = 88
 
-print(a.sum())  # 6
-print(a.mean())  # 2
-
-b = torch.tensor([4, 5, 6], dtype=torch.float32)
-
-print(a + b)  # [5, 7, 9]
-print(a * b)  # [4, 10, 18]
-
-c = torch.tensor([4.0, 5.0, 6.0])
-
-print(a + c)
-print(a * c)
-
-print(torch.equal(b, c))
-print(b.dtype == c.dtype)
-print(b.shape == c.shape)
+print(original)  # [[99, 2], [3, 4]]
+print(shallow)  # [[99, 2], [3, 4]] —— 浅拷贝也修改了
