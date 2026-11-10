@@ -9,6 +9,7 @@ Transformer 全流程完整手搓【第二轮】
 - Encoder 和 Decoder 共用一张词表，注意力头数相同，max_len 相同
 """
 
+from numpy import long
 import torch
 
 torch.manual_seed(42)  # XXX
@@ -39,3 +40,25 @@ source_token_ids = torch.tensor(
 
 # 目标内容：将输入序列逆序
 target_content_ids = torch.flip(source_token_ids, dims=[1])
+
+# BOS & EOS
+B = source_token_ids.shape[0]
+
+bos = torch.full((B, 1), BOS_ID, dtype=torch.long, device=device)
+eos = torch.full((B, 1), EOS_ID, dtype=torch.long, device=device)
+
+# Decoder 输入 [B,M]
+decoder_input_ids = torch.cat([bos, target_content_ids], dim=-1)
+
+# 训练标签 [B, M]
+target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
+
+print("source_token_ids:", source_token_ids.shape)
+print("target_content_ids:", target_content_ids.shape)
+print("decoder_input_ids:", decoder_input_ids.shape)
+print("target_token_ids:", target_token_ids.shape)
+
+print("\n第一条训练数据：")
+print("Encoder 输入:", source_token_ids[0])
+print("Decoder 输入:", decoder_input_ids[0])
+print("训练标签:", target_token_ids[0])
