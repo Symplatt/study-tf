@@ -68,6 +68,7 @@ embedding_token_de = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model)
 # 查表
 token_embedded_en = embedding_token_en(source_token_ids)
 token_embedded_de = embedding_token_de(decoder_input_ids)
+print(f"token id 嵌入：{token_embedded_en.shape}")
 
 max_len = 1024
 
@@ -90,9 +91,10 @@ position_ids_de = torch.arange(
 )
 
 # 位置嵌入
-position_embedded_en = embedding_position_en(position_ids_en).unsqueeze(0)
-position_embedded_de = embedding_position_de(position_ids_de).unsqueeze(0)
+# unsqueeze(0)为显示维度管理，只是为了让张量维度变化更明确，即使没有这一步，依然可以广播相加
+position_embedded_en = embedding_position_en(position_ids_en)
+position_embedded_de = embedding_position_de(position_ids_de)
 
 # Encoder和Decoder的最终嵌入
-input_embedded_en = token_embedded_en + position_ids_en
-input_embedded_de = token_embedded_de + position_ids_de
+input_embedded_en = token_embedded_en + position_embedded_en
+input_embedded_de = token_embedded_de + position_embedded_de
