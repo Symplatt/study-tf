@@ -53,6 +53,8 @@ decoder_input_ids = torch.cat([bos, target_content_ids], dim=-1)
 # 训练标签 [B, M]
 target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
 
+# ————————— embedding —————————
+
 d_model = 64
 
 # Encoder Token Embedding
@@ -98,3 +100,14 @@ position_embedded_de = embedding_position_de(position_ids_de)
 # Encoder和Decoder的最终嵌入
 input_embedded_en = token_embedded_en + position_embedded_en
 input_embedded_de = token_embedded_de + position_embedded_de
+
+# ————————— Encoder Multi-Head Self-Attention —————————
+
+H = 8
+
+d_k = d_v = d_model // H
+
+linear_Q_en = torch.nn.Linear(d_model, H * d_k).to(device)
+linear_K_en = torch.nn.Linear(d_model, H * d_k).to(device)
+linear_V_en = torch.nn.Linear(d_model, H * d_v).to(device)
+linear_O_en = torch.nn.Linear(H * d_v, d_model).to(device)
