@@ -55,7 +55,7 @@ position_ids_en = torch.arange(N)
 weight_embedding_position_en = torch.randn(max_len, d_model_en)
 
 # 查表，最终输入 = Token Embedding + Positional Embedding → [B, N, D_en]
-# 此处用到PyTorch的「高级索引」机制，让「索引张量」中的每个元素，索引「被索引张量」的第 0 维。
+# 此处用到PyTorch的「高级索引」机制，让「索引张量」中的每个特征，索引「被索引张量」的第 0 维。
 input_embedded_en = (
     weight_embedding_token_en[origin_token_ids_en]
     + weight_embedding_position_en[position_ids_en]

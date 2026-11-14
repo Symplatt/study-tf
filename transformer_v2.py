@@ -7,11 +7,12 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - dropout 暂时省略
 - 暂时只考虑 <BOS>、<EOS> 两个特殊 Token，即使 <PAD>、<UNK> 也不考虑
 - Encoder 和 Decoder 共用一张词表，注意力头数相同，max_len 相同
+- Encoder 和 Decoder 的 d_model 相等
 """
 
 import torch
 
-torch.manual_seed(42)  # XXX
+torch.manual_seed(42)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -52,12 +53,46 @@ decoder_input_ids = torch.cat([bos, target_content_ids], dim=-1)
 # 训练标签 [B, M]
 target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
 
-print("source_token_ids:", source_token_ids.shape)
-print("target_content_ids:", target_content_ids.shape)
-print("decoder_input_ids:", decoder_input_ids.shape)
-print("target_token_ids:", target_token_ids.shape)
+d_model = 64
 
-print("\n第一条训练数据：")
-print("Encoder 输入:", source_token_ids[0])
-print("Decoder 输入:", decoder_input_ids[0])
-print("训练标签:", target_token_ids[0])
+# Encoder Token Embedding
+embedding_token_en = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(
+    device
+)
+
+# Decoder Token Embedding
+embedding_token_de = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(
+    device
+)
+
+# 查表
+token_embedded_en = embedding_token_en(source_token_ids)
+token_embedded_de = embedding_token_de(decoder_input_ids)
+
+max_len = 1024
+
+# Encoder Position Embedding
+embedding_position_en = torch.nn.Embedding(
+    num_embeddings=max_len, embedding_dim=d_model
+).to(device)
+
+# Decoder Position Embedding
+embedding_position_de = torch.nn.Embedding(
+    num_embeddings=max_len, embedding_dim=d_model
+).to(device)
+
+# Encoder和Decoder的位置ID
+position_ids_en = torch.arange(
+    source_token_ids.shape[1], dtype=torch.long, device=device
+)
+position_ids_de = torch.arange(
+    target_token_ids.shape[1], dtype=torch.long, device=device
+)
+
+# 位置嵌入
+position_embedded_en = embedding_position_en(position_ids_en).unsqueeze(0)
+position_embedded_de = embedding_position_de(position_ids_de).unsqueeze(0)
+
+# Encoder和Decoder的最终嵌入
+input_embedded_en = token_embedded_en + position_ids_en
+input_embedded_de = token_embedded_de + position_ids_de
