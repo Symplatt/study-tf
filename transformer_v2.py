@@ -1,5 +1,5 @@
 """
-Transformer 全流程完整手搓【第二轮】
+Transformer 全流程完整手搓【第二轮】（输入为一串数字，输出为其倒序）
 使用PyTorch实现
 
 为了易于理解：
@@ -9,7 +9,6 @@ Transformer 全流程完整手搓【第二轮】
 - Encoder 和 Decoder 共用一张词表，注意力头数相同，max_len 相同
 """
 
-from numpy import long
 import torch
 
 torch.manual_seed(42)  # XXX
