@@ -11,6 +11,8 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 """
 
 import torch
+import math
+from transformer_v1 import K_en, V_en
 
 torch.manual_seed(42)
 
@@ -37,6 +39,8 @@ source_token_ids = torch.tensor(
     dtype=torch.long,
     device=device,
 )
+
+N = source_token_ids.shape[1]
 
 # 目标内容：将输入序列逆序
 target_content_ids = torch.flip(source_token_ids, dims=[1])
@@ -111,3 +115,22 @@ linear_Q_en = torch.nn.Linear(d_model, H * d_k).to(device)
 linear_K_en = torch.nn.Linear(d_model, H * d_k).to(device)
 linear_V_en = torch.nn.Linear(d_model, H * d_v).to(device)
 linear_O_en = torch.nn.Linear(H * d_v, d_model).to(device)
+
+# 计算QKV
+Q_en = linear_Q_en(input_embedded_en)
+K_en = linear_K_en(input_embedded_en)
+V_en = linear_V_en(input_embedded_en)
+
+# 拆分多头
+Q_en = Q_en.reshape(B, N, H, d_k).transpose(1, 2)
+K_en = K_en.reshape(B, N, H, d_k).transpose(1, 2)
+V_en = V_en.reshape(B, N, H, d_v).transpose(1, 2)
+
+# 缩放点积
+scoures_en = (Q_en @ K_en.transpose(-1, -2)) / math.sqrt(d_k)
+# 注意力权重
+attn_weights_en = torch.softmax(scoures_en, dim=-1)
+# Multihead self attention最终输出
+attn_output_en = linear_O_en(
+    (attn_weights_en @ V_en).transpose(1, 2).reshape(B, N, H * d_v)
+)
