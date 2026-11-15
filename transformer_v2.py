@@ -134,3 +134,10 @@ attn_weights_en = torch.softmax(scoures_en, dim=-1)
 attn_output_en = linear_O_en(
     (attn_weights_en @ V_en).transpose(1, 2).reshape(B, N, H * d_v)
 )
+
+# 残差连接
+residual_1_en = input_embedded_en + attn_output_en
+
+# LayerNorm(γ和β直接由 PyTorch 自动创建，我滴天这也太爽了竟然不用手敲一遍！(∠・ω< )⌒☆)
+layer_norm_1_en = torch.nn.LayerNorm(normalized_shape=d_model, eps=1e-5).to(device)
+x_norm_1_en = layer_norm_1_en(residual_1_en)
