@@ -10,6 +10,9 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - Encoder 和 Decoder 的 d_model 相等
 """
 
+from turtle import forward
+from typing import Any
+
 import torch
 import math
 from transformer_v1 import K_en, V_en
@@ -105,65 +108,32 @@ position_embedded_de = embedding_position_de(position_ids_de)
 input_embedded_en = token_embedded_en + position_embedded_en
 input_embedded_de = token_embedded_de + position_embedded_de
 
-# ————————— Encoder Multi-Head Self-Attention —————————
 
-H = 8
+# ————————— 创建 Encoder BLOCK 类 —————————
+class EncoderBlock(torch.nn.Module):
+    def __init__(self, d_model, H, d_ff):
+        self.H = H
+        self.d_k = d_model // H
+        self.d_v = d_model // H
 
-d_k = d_v = d_model // H
+        # Multi-Head Self-Attention
+        # 使用 self. 保存为对象属性，之后的forward()还得用d_k和d_v呢
+        self.linear_Q = torch.nn.Linear(d_model, H * self.d_k)
+        self.linear_K = torch.nn.Linear(d_model, H * self.d_k)
+        self.linear_V = torch.nn.Linear(d_model, H * self.d_v)
+        self.linear_O = torch.nn.Linear(H * self.d_v, d_model)
 
-linear_Q_en = torch.nn.Linear(d_model, H * d_k).to(device)
-linear_K_en = torch.nn.Linear(d_model, H * d_k).to(device)
-linear_V_en = torch.nn.Linear(d_model, H * d_v).to(device)
-linear_O_en = torch.nn.Linear(H * d_v, d_model).to(device)
+        # LayerNorm 1
+        self.layer_norm_1 = torch.nn.LayerNorm(d_model)
 
-# 计算QKV
-Q_en = linear_Q_en(input_embedded_en)
-K_en = linear_K_en(input_embedded_en)
-V_en = linear_V_en(input_embedded_en)
+        # FFN
+        self.linear_1 = torch.nn.Linear(d_model, d_ff)
+        self.gelu = torch.nn.GELU()
+        self.linear_2 = torch.nn.Linear(d_ff, d_model)
 
-# 拆分多头
-Q_en = Q_en.reshape(B, N, H, d_k).transpose(1, 2)
-K_en = K_en.reshape(B, N, H, d_k).transpose(1, 2)
-V_en = V_en.reshape(B, N, H, d_v).transpose(1, 2)
+        # LayerNorm 2
+        self.layer_norm_2 = torch.nn.LayerNorm(d_model)
 
-# 缩放点积
-scoures_en = (Q_en @ K_en.transpose(-1, -2)) / math.sqrt(d_k)
-# 注意力权重
-attn_weights_en = torch.softmax(scoures_en, dim=-1)
-# Multihead self attention最终输出
-attn_output_en = linear_O_en(
-    (attn_weights_en @ V_en).transpose(1, 2).reshape(B, N, H * d_v)
-)
-
-# 残差连接
-residual_1_en = input_embedded_en + attn_output_en
-
-# 第1次LayerNorm
-# (γ和β直接由 PyTorch 自动创建，我滴天这也太爽了竟然不用手敲一遍！(∠・ω< )⌒☆)
-layer_norm_1_en = torch.nn.LayerNorm(normalized_shape=d_model, eps=1e-5).to(device)
-x_norm_1_en = layer_norm_1_en(residual_1_en)
-print(layer_norm_1_en.weight.requires_grad)  # γ是否参与训练
-print(layer_norm_1_en.bias.requires_grad)  # β是否参与训练
-
-# ————————— Encoder FFN —————————
-
-d_ff = d_model * 4
-
-linear_1_en = torch.nn.Linear(d_model, d_ff).to(device)
-gelu_en = torch.nn.GELU()
-linear_2_en = torch.nn.Linear(d_ff, d_model).to(device)
-
-x_ffn_1_en = linear_1_en(x_norm_1_en)
-x_ffn_gelu_en = gelu_en(x_ffn_1_en)
-x_ffn_2_en = linear_2_en(x_ffn_gelu_en)
-
-print("FFN Linear 1:", x_ffn_1_en.shape)
-print("FFN GELU:", x_ffn_gelu_en.shape)
-print("FFN Linear 2:", x_ffn_2_en.shape)
-
-# 残差连接
-residual_2_en = x_norm_1_en + x_ffn_2_en
-
-# 第2次LayerNorm
-layer_norm_2_en = torch.nn.LayerNorm(normalized_shape=d_model, eps=1e-5).to(device)
-x_norm_2_en = layer_norm_2_en(residual_2_en)
+    def forward(self, x):
+        B, N, D = x.shape
+        # Multi-Head Self-Attention
