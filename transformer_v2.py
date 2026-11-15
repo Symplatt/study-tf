@@ -138,6 +138,32 @@ attn_output_en = linear_O_en(
 # 残差连接
 residual_1_en = input_embedded_en + attn_output_en
 
-# LayerNorm(γ和β直接由 PyTorch 自动创建，我滴天这也太爽了竟然不用手敲一遍！(∠・ω< )⌒☆)
+# 第1次LayerNorm
+# (γ和β直接由 PyTorch 自动创建，我滴天这也太爽了竟然不用手敲一遍！(∠・ω< )⌒☆)
 layer_norm_1_en = torch.nn.LayerNorm(normalized_shape=d_model, eps=1e-5).to(device)
 x_norm_1_en = layer_norm_1_en(residual_1_en)
+print(layer_norm_1_en.weight.requires_grad)  # γ是否参与训练
+print(layer_norm_1_en.bias.requires_grad)  # β是否参与训练
+
+# ————————— Encoder FFN —————————
+
+d_ff = d_model * 4
+
+linear_1_en = torch.nn.Linear(d_model, d_ff).to(device)
+gelu_en = torch.nn.GELU()
+linear_2_en = torch.nn.Linear(d_ff, d_model).to(device)
+
+x_ffn_1_en = linear_1_en(x_norm_1_en)
+x_ffn_gelu_en = gelu_en(x_ffn_1_en)
+x_ffn_2_en = linear_2_en(x_ffn_gelu_en)
+
+print("FFN Linear 1:", x_ffn_1_en.shape)
+print("FFN GELU:", x_ffn_gelu_en.shape)
+print("FFN Linear 2:", x_ffn_2_en.shape)
+
+# 残差连接
+residual_2_en = x_norm_1_en + x_ffn_2_en
+
+# 第2次LayerNorm
+layer_norm_2_en = torch.nn.LayerNorm(normalized_shape=d_model, eps=1e-5).to(device)
+x_norm_2_en = layer_norm_2_en(residual_2_en)
