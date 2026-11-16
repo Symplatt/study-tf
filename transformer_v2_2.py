@@ -10,12 +10,8 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - Encoder 和 Decoder 的 d_model 相等
 """
 
-from turtle import forward
-from typing import Any
-
 import torch
 import math
-from transformer_v1 import K_en, V_en
 
 torch.manual_seed(42)
 
@@ -77,7 +73,6 @@ embedding_token_de = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model)
 # 查表
 token_embedded_en = embedding_token_en(source_token_ids)
 token_embedded_de = embedding_token_de(decoder_input_ids)
-print(f"token id 嵌入：{token_embedded_en.shape}")
 
 max_len = 1024
 
@@ -112,6 +107,8 @@ input_embedded_de = token_embedded_de + position_embedded_de
 # ————————— 创建 Encoder BLOCK 类 —————————
 class EncoderBlock(torch.nn.Module):
     def __init__(self, d_model, H, d_ff):
+        super().__init__()
+
         self.H = H
         self.d_k = d_model // H
         self.d_v = d_model // H
@@ -136,4 +133,34 @@ class EncoderBlock(torch.nn.Module):
 
     def forward(self, x):
         B, N, D = x.shape
+
         # Multi-Head Self-Attention
+        Q = self.linear_Q(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
+        K = self.linear_Q(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
+        V = self.linear_Q(x).reshape(B, N, self.H, self.d_v).transpose(1, 2)
+
+        output_attn = self.linear_O(
+            (torch.softmax(Q @ K.transpose(-2, -1) / math.sqrt(self.d_k), dim=-1) @ V)
+            .transpose(1, 2)
+            .reshape(B, N, self.H * self.d_v)
+        )
+
+        # Residual + LayerNorm 1
+        x_norm_1 = self.layer_norm_1(x + output_attn)
+
+        # FFN
+        ffn_output = self.linear_2(self.gelu(self.linear_1(x_norm_1)))
+
+        # Residual + LayerNorm 1
+        x_norm_2 = self.layer_norm_2(x_norm_1 + ffn_output)
+
+        return x_norm_2
+
+
+# 创建 Encoder Bloc
+encoder_block = EncoderBlock(d_model=d_model, H=8, d_ff=d_model * 4).to(device)
+
+# 前向传播
+encoder_output = encoder_block(input_embedded_en)
+
+print("Encoder Output:", encoder_output.shape)
