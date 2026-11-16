@@ -14,6 +14,7 @@ from turtle import forward
 from typing import Any
 
 import torch
+import torch.nn as nn
 import math
 
 torch.manual_seed(42)
@@ -64,14 +65,10 @@ target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
 d_model = 64
 
 # Encoder Token Embedding
-embedding_token_en = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(
-    device
-)
+embedding_token_en = nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(device)
 
 # Decoder Token Embedding
-embedding_token_de = torch.nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(
-    device
-)
+embedding_token_de = nn.Embedding(num_embeddings=V, embedding_dim=d_model).to(device)
 
 # 查表
 token_embedded_en = embedding_token_en(source_token_ids)
@@ -80,14 +77,14 @@ token_embedded_de = embedding_token_de(decoder_input_ids)
 max_len = 1024
 
 # Encoder Position Embedding
-embedding_position_en = torch.nn.Embedding(
-    num_embeddings=max_len, embedding_dim=d_model
-).to(device)
+embedding_position_en = nn.Embedding(num_embeddings=max_len, embedding_dim=d_model).to(
+    device
+)
 
 # Decoder Position Embedding
-embedding_position_de = torch.nn.Embedding(
-    num_embeddings=max_len, embedding_dim=d_model
-).to(device)
+embedding_position_de = nn.Embedding(num_embeddings=max_len, embedding_dim=d_model).to(
+    device
+)
 
 # Encoder和Decoder的位置ID
 position_ids_en = torch.arange(
@@ -107,8 +104,7 @@ input_embedded_en = token_embedded_en + position_embedded_en
 input_embedded_de = token_embedded_de + position_embedded_de
 
 
-# ————————— 创建 Encoder BLOCK 类 —————————
-class EncoderBlock(torch.nn.Module):
+class EncoderBlock(nn.Module):
     def __init__(self, d_model, H, d_ff):
         super().__init__()
 
@@ -118,21 +114,21 @@ class EncoderBlock(torch.nn.Module):
 
         # Multi-Head Self-Attention
         # 使用 self. 保存为对象属性，之后的forward()还得用d_k和d_v呢
-        self.linear_Q = torch.nn.Linear(d_model, H * self.d_k)
-        self.linear_K = torch.nn.Linear(d_model, H * self.d_k)
-        self.linear_V = torch.nn.Linear(d_model, H * self.d_v)
-        self.linear_O = torch.nn.Linear(H * self.d_v, d_model)
+        self.linear_Q = nn.Linear(d_model, H * self.d_k)
+        self.linear_K = nn.Linear(d_model, H * self.d_k)
+        self.linear_V = nn.Linear(d_model, H * self.d_v)
+        self.linear_O = nn.Linear(H * self.d_v, d_model)
 
         # LayerNorm 1
-        self.layer_norm_1 = torch.nn.LayerNorm(d_model)
+        self.layer_norm_1 = nn.LayerNorm(d_model)
 
         # FFN
-        self.linear_1 = torch.nn.Linear(d_model, d_ff)
-        self.gelu = torch.nn.GELU()
-        self.linear_2 = torch.nn.Linear(d_ff, d_model)
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.gelu = nn.GELU()
+        self.linear_2 = nn.Linear(d_ff, d_model)
 
         # LayerNorm 2
-        self.layer_norm_2 = torch.nn.LayerNorm(d_model)
+        self.layer_norm_2 = nn.LayerNorm(d_model)
 
     def forward(self, x):
         B, N, D = x.shape
@@ -161,13 +157,13 @@ class EncoderBlock(torch.nn.Module):
         return x_norm_2
 
 
-class Encoder(torch.nn.Module):
+class Encoder(nn.Module):
     def __init__(self, d_model, H, d_ff, num_layers):
         super().__init__()
 
         # 堆叠多个Encoder Block
         # EncoderBlock(参数)就可以直接调用forward()方法
-        self.layers = torch.nn.ModuleList(
+        self.layers = nn.ModuleList(
             [EncoderBlock(d_model, H, d_ff) for _ in range(num_layers)]
         )
 
@@ -175,6 +171,57 @@ class Encoder(torch.nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
+
+class DecoderBlock(nn.Module):
+    def __init__(self, d_model, H, d_ff):
+        super().__init__()
+
+        self.H = H
+        self.d_k = d_model // H
+        self.d_v = d_model // H
+
+        # Masked Multi-Head Self-Attention
+        self.linear_Q_mask = nn.Linear(d_model, H * self.d_k)
+        self.linear_K_mask = nn.Linear(d_model, H * self.d_k)
+        self.linear_V_mask = nn.Linear(d_model, H * self.d_v)
+        self.linear_O_mask = nn.Linear(H * self.d_v, d_model)
+
+        # LayerNorm 1
+        self.layer_norm_1 = nn.LayerNorm(d_model)
+
+    def forward(self, x):
+        B, M, D = x.shape
+
+        # Multi-Head Self-Attention
+        Q = self.linear_Q_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        K = self.linear_K_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        V = self.linear_V_mask(x).reshape(B, M, self.H, self.d_v).transpose(1, 2)
+
+        # 计算 Attention Scores
+        scores = Q @ K.transpose(-1, -2) / math.sqrt(self.d_k)
+
+        # Causal Mask
+        # triu：来一个上三角矩阵（下三角全是0），diagonal=1:对角线也不要了，都设成0
+        mask = torch.triu(
+            torch.full((M, M), float("-inf"), dtype=scores.dtype, device=device),
+            diagonal=1,
+        )
+
+        # Attention
+        scores += mask
+        output_attn_mask = self.linear_O_mask(
+            (torch.softmax(scores, dim=-1) @ V)
+            .transpose(1, 2)
+            .reshape(B, M, self.H * self.d_v)
+        )
+
+        x = self.layer_norm_1(x + output_attn_mask)
+
+        return x
+
+
+# class Decoder(nn.Module):
 
 
 num_encoder_layers = 6
@@ -191,4 +238,16 @@ print(
     "✅" if encoder_output.shape == (8, 4, 64) else "❌",
     "Encoder Output:",
     encoder_output.shape,
+)
+
+# Decoder Masked Self-Attention
+
+decoder_block = DecoderBlock(d_model=d_model, H=8, d_ff=d_model * 4).to(device)
+
+decoder_output = decoder_block(input_embedded_de)
+
+print(
+    "✅" if decoder_output.shape == (8, 5, 64) else "❌",
+    "Decoder Output:",
+    decoder_output.shape,
 )
