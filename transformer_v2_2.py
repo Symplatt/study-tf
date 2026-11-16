@@ -1,6 +1,6 @@
 """
 Transformer 全流程完整手搓【第二轮】（输入为一串数字，输出为其倒序）
-使用PyTorch实现
+使用PyTorch实现Transformer的训练阶段
 
 为了易于理解：
 - 使用 Post-LN
@@ -9,6 +9,9 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - Encoder 和 Decoder 共用一张词表，注意力头数相同，max_len 相同
 - Encoder 和 Decoder 的 d_model 相等
 """
+
+from turtle import forward
+from typing import Any
 
 import torch
 import math
@@ -139,6 +142,7 @@ class EncoderBlock(torch.nn.Module):
         K = self.linear_K(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
         V = self.linear_V(x).reshape(B, N, self.H, self.d_v).transpose(1, 2)
 
+        # Attention
         output_attn = self.linear_O(
             (torch.softmax(Q @ K.transpose(-2, -1) / math.sqrt(self.d_k), dim=-1) @ V)
             .transpose(1, 2)
@@ -151,16 +155,40 @@ class EncoderBlock(torch.nn.Module):
         # FFN
         ffn_output = self.linear_2(self.gelu(self.linear_1(x_norm_1)))
 
-        # Residual + LayerNorm 1
+        # Residual + LayerNorm 2
         x_norm_2 = self.layer_norm_2(x_norm_1 + ffn_output)
 
         return x_norm_2
 
 
-# 创建 Encoder Bloc
-encoder_block = EncoderBlock(d_model=d_model, H=8, d_ff=d_model * 4).to(device)
+class Encoder(torch.nn.Module):
+    def __init__(self, d_model, H, d_ff, num_layers):
+        super().__init__()
+
+        # 堆叠多个Encoder Block
+        # EncoderBlock(参数)就可以直接调用forward()方法
+        self.layers = torch.nn.ModuleList(
+            [EncoderBlock(d_model, H, d_ff) for _ in range(num_layers)]
+        )
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+num_encoder_layers = 6
+
+encoder = Encoder(
+    d_model=d_model, H=8, d_ff=d_model * 4, num_layers=num_encoder_layers
+).to(device)
 
 # 前向传播
-encoder_output = encoder_block(input_embedded_en)
+# 直接encoder(参数)就可以调用Encoder的实例的forward()方法了
+encoder_output = encoder(input_embedded_en)
 
-print("Encoder Output:", encoder_output.shape)
+print(
+    "✅" if encoder_output.shape == (8, 4, 64) else "❌",
+    "Encoder Output:",
+    encoder_output.shape,
+)

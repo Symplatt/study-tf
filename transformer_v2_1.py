@@ -1,6 +1,6 @@
 """
 Transformer 全流程完整手搓【第二轮】（输入为一串数字，输出为其倒序）
-使用PyTorch实现
+使用PyTorch实现Transformer的训练阶段
 
 为了易于理解：
 - 使用 Post-LN
