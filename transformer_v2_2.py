@@ -190,33 +190,70 @@ class DecoderBlock(nn.Module):
         # LayerNorm 1
         self.layer_norm_1 = nn.LayerNorm(d_model)
 
-    def forward(self, x):
+        # Multi-Head Cross-Attention
+        self.linear_Q_corss = nn.Linear(d_model, H * self.d_k)
+        self.linear_K_corss = nn.Linear(d_model, H * self.d_k)
+        self.linear_V_corss = nn.Linear(d_model, H * self.d_v)
+        self.linear_O_corss = nn.Linear(H * self.d_v, d_model)
+
+        # LayerNorm 2
+        self.layer_norm_2 = nn.LayerNorm(d_model)
+
+    def forward(self, x, encoder_output):
         B, M, D = x.shape
+        N = encoder_output.shape[1]
 
         # Multi-Head Self-Attention
-        Q = self.linear_Q_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
-        K = self.linear_K_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
-        V = self.linear_V_mask(x).reshape(B, M, self.H, self.d_v).transpose(1, 2)
+        Q_mask = self.linear_Q_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        K_mask = self.linear_K_mask(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        V_mask = self.linear_V_mask(x).reshape(B, M, self.H, self.d_v).transpose(1, 2)
 
-        # 计算 Attention Scores
-        scores = Q @ K.transpose(-1, -2) / math.sqrt(self.d_k)
+        # 计算 Attention scores_mask
+        scores_mask = Q_mask @ K_mask.transpose(-1, -2) / math.sqrt(self.d_k)
 
         # Causal Mask
         # triu：来一个上三角矩阵（下三角全是0），diagonal=1:对角线也不要了，都设成0
         mask = torch.triu(
-            torch.full((M, M), float("-inf"), dtype=scores.dtype, device=device),
+            torch.full((M, M), float("-inf"), dtype=scores_mask.dtype, device=device),
             diagonal=1,
         )
 
         # Attention
-        scores += mask
+        scores_mask += mask
         output_attn_mask = self.linear_O_mask(
-            (torch.softmax(scores, dim=-1) @ V)
+            (torch.softmax(scores_mask, dim=-1) @ V_mask)
             .transpose(1, 2)
             .reshape(B, M, self.H * self.d_v)
         )
 
+        # Residual + LayerNorm
         x = self.layer_norm_1(x + output_attn_mask)
+
+        # Multi-Head Cross-Attention
+        Q_corss = self.linear_Q_corss(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        K_corss = (
+            self.linear_K_corss(encoder_output)
+            .reshape(B, N, self.H, self.d_k)
+            .transpose(1, 2)
+        )
+        V_corss = (
+            self.linear_V_corss(encoder_output)
+            .reshape(B, N, self.H, self.d_v)
+            .transpose(1, 2)
+        )
+
+        output_attn_corss = self.linear_O_corss(
+            (
+                torch.softmax(
+                    Q_corss @ K_corss.transpose(-1, -2) / math.sqrt(self.d_k), dim=-1
+                )
+                @ V_corss
+            )
+            .transpose(1, 2)
+            .reshape(B, M, self.H * self.d_v)
+        )
+
+        x = self.layer_norm_2(x + output_attn_corss)
 
         return x
 
@@ -244,7 +281,7 @@ print(
 
 decoder_block = DecoderBlock(d_model=d_model, H=8, d_ff=d_model * 4).to(device)
 
-decoder_output = decoder_block(input_embedded_de)
+decoder_output = decoder_block(input_embedded_de, encoder_output)
 
 print(
     "✅" if decoder_output.shape == (8, 5, 64) else "❌",
