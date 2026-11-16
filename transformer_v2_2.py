@@ -96,8 +96,8 @@ position_ids_de = torch.arange(
 
 # 位置嵌入
 # unsqueeze(0)为显示维度管理，只是为了让张量维度变化更明确，即使没有这一步，依然可以广播相加
-position_embedded_en = embedding_position_en(position_ids_en)
-position_embedded_de = embedding_position_de(position_ids_de)
+position_embedded_en = embedding_position_en(position_ids_en).unsqueeze(0)
+position_embedded_de = embedding_position_de(position_ids_de).unsqueeze(0)
 
 # Encoder和Decoder的最终嵌入
 input_embedded_en = token_embedded_en + position_embedded_en
@@ -136,8 +136,8 @@ class EncoderBlock(torch.nn.Module):
 
         # Multi-Head Self-Attention
         Q = self.linear_Q(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
-        K = self.linear_Q(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
-        V = self.linear_Q(x).reshape(B, N, self.H, self.d_v).transpose(1, 2)
+        K = self.linear_K(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
+        V = self.linear_V(x).reshape(B, N, self.H, self.d_v).transpose(1, 2)
 
         output_attn = self.linear_O(
             (torch.softmax(Q @ K.transpose(-2, -1) / math.sqrt(self.d_k), dim=-1) @ V)
