@@ -10,6 +10,7 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - Encoder 和 Decoder 的 d_model 相等
 """
 
+from json import decoder
 from turtle import forward
 from typing import Any
 
@@ -199,6 +200,14 @@ class DecoderBlock(nn.Module):
         # LayerNorm 2
         self.layer_norm_2 = nn.LayerNorm(d_model)
 
+        # FFN
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.gelu = nn.GELU()
+        self.linear_2 = nn.Linear(d_ff, d_model)
+
+        # LayerNorm 3
+        self.layer_norm_3 = nn.LayerNorm(d_model)
+
     def forward(self, x, encoder_output):
         B, M, D = x.shape
         N = encoder_output.shape[1]
@@ -226,7 +235,7 @@ class DecoderBlock(nn.Module):
             .reshape(B, M, self.H * self.d_v)
         )
 
-        # Residual + LayerNorm
+        # Residual + LayerNorm 1
         x = self.layer_norm_1(x + output_attn_mask)
 
         # Multi-Head Cross-Attention
@@ -253,12 +262,31 @@ class DecoderBlock(nn.Module):
             .reshape(B, M, self.H * self.d_v)
         )
 
+        # Residual + LayerNorm 2
         x = self.layer_norm_2(x + output_attn_corss)
+
+        # FFN
+        output_ffn = self.linear_2(self.gelu(self.linear_1(x)))
+
+        # Residual + LayerNorm 3
+        x = self.layer_norm_3(x + output_ffn)
 
         return x
 
 
-# class Decoder(nn.Module):
+class Decoder(nn.Module):
+    def __init__(self, d_model, H, d_ff, num_layers):
+        super().__init__()
+
+        # 堆叠多个 Decoder Block
+        self.layers = nn.ModuleList(
+            [DecoderBlock(d_model, H, d_ff) for _ in range(num_layers)]
+        )
+
+    def forward(self, x, encoder_output):
+        for layer in self.layers:
+            x = layer(x, encoder_output)
+        return x
 
 
 num_encoder_layers = 6
@@ -277,11 +305,12 @@ print(
     encoder_output.shape,
 )
 
-# Decoder Masked Self-Attention
+num_decoder_layers = 6
 
-decoder_block = DecoderBlock(d_model=d_model, H=8, d_ff=d_model * 4).to(device)
+decoder = Decoder(d_model=d_model, H=8, d_ff=d_model * 4, num_layers=num_decoder_layers)
 
-decoder_output = decoder_block(input_embedded_de, encoder_output)
+# 前向传播
+decoder_output = decoder(input_embedded_de, encoder_output)
 
 print(
     "✅" if decoder_output.shape == (8, 5, 64) else "❌",
