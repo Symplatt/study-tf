@@ -61,8 +61,6 @@ decoder_input_ids = torch.cat([bos, target_content_ids], dim=-1)
 # 训练标签 [B, M]
 target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
 
-# ————————— embedding —————————
-
 d_model = 64
 
 # Encoder Token Embedding
@@ -223,7 +221,12 @@ class DecoderBlock(nn.Module):
         # Causal Mask
         # triu：来一个上三角矩阵（下三角全是0），diagonal=1:对角线也不要了，都设成0
         mask = torch.triu(
-            torch.full((M, M), float("-inf"), dtype=scores_mask.dtype, device=device),
+            torch.full(
+                (M, M),
+                float("-inf"),
+                dtype=scores_mask.dtype,
+                device=scores_mask.device,
+            ),
             diagonal=1,
         )
 
@@ -300,20 +303,45 @@ encoder = Encoder(
 encoder_output = encoder(input_embedded_en)
 
 print(
-    "✅" if encoder_output.shape == (8, 4, 64) else "❌",
+    "\033[32mOK\033[0m" if encoder_output.shape == (8, 4, 64) else "FAIL",
     "Encoder Output:",
     encoder_output.shape,
 )
 
 num_decoder_layers = 6
 
-decoder = Decoder(d_model=d_model, H=8, d_ff=d_model * 4, num_layers=num_decoder_layers)
+decoder = Decoder(
+    d_model=d_model, H=8, d_ff=d_model * 4, num_layers=num_decoder_layers
+).to(device)
 
 # 前向传播
 decoder_output = decoder(input_embedded_de, encoder_output)
 
 print(
-    "✅" if decoder_output.shape == (8, 5, 64) else "❌",
+    "\033[32mOK\033[0m" if decoder_output.shape == (8, 5, 64) else "FAIL",
     "Decoder Output:",
     decoder_output.shape,
 )
+
+
+# Output Projection
+linear_output = nn.Linear(d_model, V).to(device)
+
+logits = linear_output(decoder_output)
+
+# probablities = torch.softmax(logits, dim=-1) # 这句代码不需要写，计算交叉熵时自动执行softmax（@ChatGPT：完善代码的时候不要删这句注释）
+
+# Loss Function
+loss_fn = nn.CrossEntropyLoss()
+
+# 调整logits [B, M, V] → [B✕M, V]
+logits_flat = logits.reshape(-1, V)
+
+# 调整 Target [B, M] → [B✕M]
+target_flat = target_token_ids.reshape(-1)
+
+print("Logits Flat:", logits_flat.shape)
+print("Target Flat:", target_flat.shape)
+
+# 计算损失函数
+loss = loss_fn(logits_flat, target_flat)
