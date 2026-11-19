@@ -10,13 +10,11 @@ Transformer 全流程完整手搓【第二轮】（输入为一串数字，输�
 - Encoder 和 Decoder 的 d_model 相等
 """
 
-from json import decoder
-from turtle import forward
-from typing import Any
-
 import torch
 import torch.nn as nn
 import math
+
+import torch.optim.adam
 
 torch.manual_seed(42)
 
@@ -334,14 +332,26 @@ logits = linear_output(decoder_output)
 # Loss Function
 loss_fn = nn.CrossEntropyLoss()
 
-# 调整logits [B, M, V] → [B✕M, V]
-logits_flat = logits.reshape(-1, V)
-
-# 调整 Target [B, M] → [B✕M]
-target_flat = target_token_ids.reshape(-1)
-
-print("Logits Flat:", logits_flat.shape)
-print("Target Flat:", target_flat.shape)
-
 # 计算损失函数
-loss = loss_fn(logits_flat, target_flat)
+# 调整 logits [B, M, V] → [B×M, V]，调整 Target [B, M] → [B×M]
+loss = loss_fn(logits.reshape(-1, V), target_token_ids.reshape(-1))
+
+# backprogagation（就这么一句代码即可，整个Transformer那么老长一段反向传播，PyTorch里都封装好了）
+loss.backward()
+
+# Optimizer
+paramters = (
+    list(embedding_token_en.parameters())
+    + list(embedding_position_en.parameters())
+    + list(embedding_position_de.parameters())
+    + list(embedding_position_de.parameters())
+    + list(encoder.parameters())
+    + list(decoder.parameters())
+    + list(linear_output.parameters())
+)
+
+optimzer = torch.optim.Adam(paramters, lr=1e-3)
+
+optimzer.step()
+
+optimzer.zero_grad()
