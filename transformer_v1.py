@@ -308,8 +308,8 @@ while num < num_decoder_layers:
 # ————————— 收尾 —————————
 
 # 线性变换
-liner_output_de = torch.randn(d_model_de, V)
-logits_de = x_de @ liner_output_de  # [B, M, V]
+linear_output_de = torch.randn(d_model_de, V)
+logits_de = x_de @ linear_output_de  # [B, M, V]
 x_output_de = logits_de.softmax(dim=-1)  # [B, M, V]
 
 loss = 0.0

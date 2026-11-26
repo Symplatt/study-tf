@@ -188,10 +188,10 @@ class DecoderBlock(nn.Module):
         self.layer_norm_1 = nn.LayerNorm(d_model)
 
         # Multi-Head Cross-Attention
-        self.linear_Q_corss = nn.Linear(d_model, H * self.d_k)
-        self.linear_K_corss = nn.Linear(d_model, H * self.d_k)
-        self.linear_V_corss = nn.Linear(d_model, H * self.d_v)
-        self.linear_O_corss = nn.Linear(H * self.d_v, d_model)
+        self.linear_Q_cross = nn.Linear(d_model, H * self.d_k)
+        self.linear_K_cross = nn.Linear(d_model, H * self.d_k)
+        self.linear_V_cross = nn.Linear(d_model, H * self.d_v)
+        self.linear_O_cross = nn.Linear(H * self.d_v, d_model)
 
         # LayerNorm 2
         self.layer_norm_2 = nn.LayerNorm(d_model)
@@ -240,31 +240,31 @@ class DecoderBlock(nn.Module):
         x = self.layer_norm_1(x + output_attn_mask)
 
         # Multi-Head Cross-Attention
-        Q_corss = self.linear_Q_corss(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
-        K_corss = (
-            self.linear_K_corss(encoder_output)
+        Q_cross = self.linear_Q_cross(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        K_cross = (
+            self.linear_K_cross(encoder_output)
             .reshape(B, N, self.H, self.d_k)
             .transpose(1, 2)
         )
-        V_corss = (
-            self.linear_V_corss(encoder_output)
+        V_cross = (
+            self.linear_V_cross(encoder_output)
             .reshape(B, N, self.H, self.d_v)
             .transpose(1, 2)
         )
 
-        output_attn_corss = self.linear_O_corss(
+        output_attn_cross = self.linear_O_cross(
             (
                 torch.softmax(
-                    Q_corss @ K_corss.transpose(-1, -2) / math.sqrt(self.d_k), dim=-1
+                    Q_cross @ K_cross.transpose(-1, -2) / math.sqrt(self.d_k), dim=-1
                 )
-                @ V_corss
+                @ V_cross
             )
             .transpose(1, 2)
             .reshape(B, M, self.H * self.d_v)
         )
 
         # Residual + LayerNorm 2
-        x = self.layer_norm_2(x + output_attn_corss)
+        x = self.layer_norm_2(x + output_attn_cross)
 
         # FFN
         output_ffn = self.linear_2(self.gelu(self.linear_1(x)))
@@ -327,7 +327,7 @@ linear_output = nn.Linear(d_model, V).to(device)
 
 logits = linear_output(decoder_output)
 
-# probablities = torch.softmax(logits, dim=-1) # 这句代码不需要写，计算交叉熵时自动执行softmax（@ChatGPT：完善代码的时候不要删这句注释）
+# probabilities = torch.softmax(logits, dim=-1) # 这句代码不需要写，计算交叉熵时自动执行softmax（@ChatGPT：完善代码的时候不要删这句注释）
 
 # Loss Function
 loss_fn = nn.CrossEntropyLoss()
@@ -336,11 +336,11 @@ loss_fn = nn.CrossEntropyLoss()
 # 调整 logits [B, M, V] → [B×M, V]，调整 Target [B, M] → [B×M]
 loss = loss_fn(logits.reshape(-1, V), target_token_ids.reshape(-1))
 
-# backprogagation（就这么一句代码即可，整个Transformer那么老长一段反向传播，PyTorch里都封装好了）
+# backpropagation（就这么一句代码即可，整个Transformer那么老长一段反向传播，PyTorch里都封装好了）
 loss.backward()
 
 # Optimizer
-paramters = (
+parameters = (
     list(embedding_token_en.parameters())
     + list(embedding_position_en.parameters())
     + list(embedding_position_de.parameters())
@@ -350,8 +350,8 @@ paramters = (
     + list(linear_output.parameters())
 )
 
-optimzer = torch.optim.Adam(paramters, lr=1e-3)
+optimizer = torch.optim.Adam(parameters, lr=1e-3)
 
-optimzer.step()
+optimizer.step()
 
-optimzer.zero_grad()
+optimizer.zero_grad()

@@ -131,9 +131,9 @@ K_en = K_en.reshape(B, N, H, d_k).transpose(1, 2)
 V_en = V_en.reshape(B, N, H, d_v).transpose(1, 2)
 
 # 缩放点积
-scoures_en = (Q_en @ K_en.transpose(-1, -2)) / math.sqrt(d_k)
+scores_en = (Q_en @ K_en.transpose(-1, -2)) / math.sqrt(d_k)
 # 注意力权重
-attn_weights_en = torch.softmax(scoures_en, dim=-1)
+attn_weights_en = torch.softmax(scores_en, dim=-1)
 # Multihead self attention最终输出
 attn_output_en = linear_O_en(
     (attn_weights_en @ V_en).transpose(1, 2).reshape(B, N, H * d_v)

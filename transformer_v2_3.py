@@ -17,6 +17,43 @@ import math
 torch.manual_seed(42)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"current device:{device}")
+
+# Vocabulary
+V = 12
+
+BOS_ID = 10
+EOS_ID = 11
+
+# Encoder 输入 [B, N]
+source_token_ids = torch.tensor(
+    [
+        [1, 2, 3, 4],
+        [4, 3, 2, 1],
+        [1, 3, 5, 7],
+        [2, 4, 6, 8],
+        [9, 8, 7, 6],
+        [3, 6, 9, 2],
+        [5, 1, 4, 8],
+        [7, 2, 5, 9],
+    ],
+    dtype=torch.long,
+    device=device,
+)
+
+# 目标内容：将输入序列逆序
+target_content_ids = torch.flip(source_token_ids, dims=[1])
+
+B = source_token_ids.shape[0]
+
+bos = torch.full((B, 1), BOS_ID, dtype=torch.long, device=device)
+eos = torch.full((B, 1), EOS_ID, dtype=torch.long, device=device)
+
+# Decoder 输入 [B,M]
+decoder_input_ids = torch.cat([bos, target_content_ids], dim=-1)
+
+# 训练标签 [B, M]
+target_token_ids = torch.cat([target_content_ids, eos], dim=-1)
 
 
 class EncoderBlock(nn.Module):
@@ -46,7 +83,7 @@ class EncoderBlock(nn.Module):
         self.layer_norm_2 = nn.LayerNorm(d_model)
 
     def forward(self, x):
-        B, N, D = x.shape
+        B, N, _ = x.shape  # BMD中的D用不上
 
         # Multi-Head Self-Attention
         Q = self.linear_Q(x).reshape(B, N, self.H, self.d_k).transpose(1, 2)
@@ -106,10 +143,10 @@ class DecoderBlock(nn.Module):
         self.layer_norm_1 = nn.LayerNorm(d_model)
 
         # Multi-Head Cross-Attention
-        self.linear_Q_corss = nn.Linear(d_model, H * self.d_k)
-        self.linear_K_corss = nn.Linear(d_model, H * self.d_k)
-        self.linear_V_corss = nn.Linear(d_model, H * self.d_v)
-        self.linear_O_corss = nn.Linear(H * self.d_v, d_model)
+        self.linear_Q_cross = nn.Linear(d_model, H * self.d_k)
+        self.linear_K_cross = nn.Linear(d_model, H * self.d_k)
+        self.linear_V_cross = nn.Linear(d_model, H * self.d_v)
+        self.linear_O_cross = nn.Linear(H * self.d_v, d_model)
 
         # LayerNorm 2
         self.layer_norm_2 = nn.LayerNorm(d_model)
@@ -147,7 +184,7 @@ class DecoderBlock(nn.Module):
         )
 
         # Attention
-        scores_mask += mask
+        scores_mask = scores_mask + mask
         output_attn_mask = self.linear_O_mask(
             (torch.softmax(scores_mask, dim=-1) @ V_mask)
             .transpose(1, 2)
@@ -158,31 +195,31 @@ class DecoderBlock(nn.Module):
         x = self.layer_norm_1(x + output_attn_mask)
 
         # Multi-Head Cross-Attention
-        Q_corss = self.linear_Q_corss(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
-        K_corss = (
-            self.linear_K_corss(encoder_output)
+        Q_cross = self.linear_Q_cross(x).reshape(B, M, self.H, self.d_k).transpose(1, 2)
+        K_cross = (
+            self.linear_K_cross(encoder_output)
             .reshape(B, N, self.H, self.d_k)
             .transpose(1, 2)
         )
-        V_corss = (
-            self.linear_V_corss(encoder_output)
+        V_cross = (
+            self.linear_V_cross(encoder_output)
             .reshape(B, N, self.H, self.d_v)
             .transpose(1, 2)
         )
 
-        output_attn_corss = self.linear_O_corss(
+        output_attn_cross = self.linear_O_cross(
             (
                 torch.softmax(
-                    Q_corss @ K_corss.transpose(-1, -2) / math.sqrt(self.d_k), dim=-1
+                    Q_cross @ K_cross.transpose(-1, -2) / math.sqrt(self.d_k), dim=-1
                 )
-                @ V_corss
+                @ V_cross
             )
             .transpose(1, 2)
             .reshape(B, M, self.H * self.d_v)
         )
 
         # Residual + LayerNorm 2
-        x = self.layer_norm_2(x + output_attn_corss)
+        x = self.layer_norm_2(x + output_attn_cross)
 
         # FFN
         output_ffn = self.linear_2(self.gelu(self.linear_1(x)))
@@ -230,4 +267,69 @@ class Transformer(nn.Module):
         self.linear_output = nn.Linear(d_model, V)
 
     def forward(self, source_token_ids, decoder_input_ids):
-        
+
+        N = source_token_ids.shape[1]
+        M = decoder_input_ids.shape[1]
+
+        position_ids_en = torch.arange(N, device=source_token_ids.device)
+        position_ids_de = torch.arange(M, device=decoder_input_ids.device)
+
+        # Encoder Embedding
+        input_embedded_en = self.embedding_token_en(
+            source_token_ids
+        ) + self.embedding_position_en(position_ids_en).unsqueeze(0)
+
+        # Decoder Embedding
+        input_embedded_de = self.embedding_token_de(
+            decoder_input_ids
+        ) + self.embedding_position_de(position_ids_de).unsqueeze(0)
+
+        # Encoder
+        encoder_output = self.encoder(input_embedded_en)
+
+        # Decoder
+        decoder_output = self.decoder(input_embedded_de, encoder_output)
+
+        # Output Projection
+        logits = self.linear_output(decoder_output)
+
+        return logits
+
+
+# 实例化
+model = Transformer(
+    V=V, H=8, d_model=64, d_ff=256, max_len=1024, num_layers_en=6, num_layers_de=6
+).to(device)
+
+
+# Loss Function
+loss_fn = nn.CrossEntropyLoss()
+
+# Optimizer
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+# Training Loop
+num_epochs = 100
+
+model.train()
+
+for epoch in range(num_epochs):
+
+    # 清空梯度
+    optimizer.zero_grad()
+
+    # 前向传播
+    logits = model(source_token_ids, decoder_input_ids)
+
+    # Loss
+    loss = loss_fn(logits.reshape(-1, V), target_token_ids.reshape(-1))
+
+    # 反向传播
+    loss.backward()
+
+    # 更新参数
+    optimizer.step()
+
+    # 打印 Loss
+    if (epoch + 1) % 10 == 0:
+        print(f"Epoch {epoch + 1:3d} | " f"Loss: {loss.item():.4f}")
